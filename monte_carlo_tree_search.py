@@ -64,6 +64,7 @@ class MCTS:
     def __init__(self, exploration_weight=1, select_type='uct', budget=1000):
         self.Q = defaultdict(float)  # total reward of each node
         self.N = defaultdict(float)  # total visit count for each node
+        self.record = defaultdict(list)
         self.models = defaultdict(partial(model,budget=budget))
         self.children = dict()  # children of each node
         self.exploration_weight = exploration_weight
@@ -88,10 +89,21 @@ class MCTS:
                 return float("-inf")
             return self.models[n].prediction(t)
         
+        def uct_normal_score(n, t):
+            if self.N[n] < 2:
+                return float("-inf") # uct_normal needs at least 2 observations
+            mean = self.Q[n] / self.N[n]
+            squared_rewards = np.array(self.record[n]) ** 2
+            sv = (squared_rewards - self.N[n] * (mean ** 2)) / (self.N[n] - 1)
+            c = np.sqrt(16 * sv * np.log(t - 1) / self.N[n])
+            return mean + c
+
         if mode == 'uct':
             return max(self.children[node], key=score)
         elif mode == 'bandit':
             return max(self.children[node], key=bandit_score)
+        elif mode == 'uct_normal':
+            return max(self.children[node], key=uct_normal_score)
 
     def do_rollout(self, node, t):
         "Make the tree one layer better. (Train for one iteration.)"
@@ -121,6 +133,8 @@ class MCTS:
                 node = self._uct_select(node)  # descend a layer deeper
             elif self.select_type == 'bandit':
                 node = self._bandit_select(node, t)
+            elif self.select_type == 'uct_normal':
+                node = self._uct_normal_select(node, t)
 
     def _expand(self, node):
         "Update the `children` dict with the children of `node`"
@@ -152,6 +166,7 @@ class MCTS:
         for node in reversed(path):
             self.N[node] += 1
             self.Q[node] += reward
+            self.record[node].append(reward)
             self.models[node].getReward(reward)
             # reward = 1 - reward  # 1 for me is 0 for my enemy, and vice versa
 
@@ -185,6 +200,26 @@ class MCTS:
 
 
         return max(self.children[node], key=bandit)
+    
+    def _uct_normal_select(self, node, t):
+        "Select a child of node, balancing exploration & exploitation"
+
+        # All children of node should already be expanded:
+        assert all(n in self.children for n in self.children[node])
+
+        log_N_vertex = math.log(self.N[node])
+
+        def uct_normal(n):
+            "Upper confidence bound for trees"
+            if self.N[n] < 8 * np.log(t):
+                return float("inf")
+            else:
+                mean = self.Q[n] / self.N[n]
+                squared_rewards = np.array(self.record[n]) ** 2
+                sv = (squared_rewards - self.N[n] * (mean ** 2)) / (self.N[n] - 1)
+                c = np.sqrt(16 * sv * np.log(t - 1) / self.N[n])
+                return mean + c
+        return max(self.children[node], key=uct_normal)
 
 
 class Node(ABC):
