@@ -1,3 +1,4 @@
+# %%
 """
 An example implementation of the abstract Node class for use in MCTS
 If you run this file then you can play against the computer.
@@ -19,10 +20,10 @@ from collections import namedtuple
 from random import choice
 from monte_carlo_tree_search import MCTS, Node
 import numpy as np
-
+from tqdm.notebook import tqdm
 _TTTB = namedtuple("SimpleTree", "tup terminal")
-LAYERS = 5
-BUDGET = 10000
+LAYERS = 3
+BUDGET = 1000
 
 # Inheriting from a namedtuple is convenient because it makes the class
 # immutable and predefines __init__, __repr__, __hash__, __eq__, and others
@@ -38,30 +39,20 @@ class SimpleTree(_TTTB, Node):
     def find_random_child(board):
         if board.terminal:
             return None  # If the game is finished then no moves can be made
-        # empty_spots = [i for i, value in enumerate(board.tup) if value is None]
         empty_spots = [0,1]
         return board.make_move(choice(empty_spots))
 
     def reward(board):
         return board.cal_reward()
-        # if not board.terminal:
-        #     raise RuntimeError(f"reward called on nonterminal board {board}")
-        # if board.winner is board.turn:
-        #     # It's your turn and you've already won. Should be impossible.
-        #     raise RuntimeError(f"reward called on unreachable board {board}")
-        # if board.turn is (not board.winner):
-        #     return 0  # Your opponent has just won. Bad.
-        # if board.winner is None:
-        #     return 0.5  # Board is a tie
-        # # The winner is neither True, False, nor None
-        # raise RuntimeError(f"board has unknown winner type {board.winner}")
     
-    def cal_reward(board):
+    def cal_reward(board, bounded=False):
         start = 1
         accum = 0
         for selection in board.tup:
             accum += selection * start
             start *= 0.5
+        if bounded:
+            return np.random.beta(accum + 1, accum + 1)
         return np.random.normal(0,accum)
 
     def is_terminal(board):
@@ -89,72 +80,63 @@ class SimpleTree(_TTTB, Node):
 
 
 def play_game():
-    tree_bandit = MCTS(budget=BUDGET, select_type='bandit')
-    tree_uct = MCTS(budget=BUDGET, select_type='uct')
+    all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy']
+    trees = {}
+    for tree_name in all_tree_type:
+        trees[tree_name] = MCTS(budget=BUDGET, select_type=tree_name)
+    print(trees)
+    # tree_bandit = MCTS(budget=BUDGET, select_type='bandit')
+    # tree_uct = MCTS(budget=BUDGET, select_type='uct')
+    # tree_uct_normal(budget=BUDGET, select_type='uct_normal')
+    result = {}
     times = 1000
     trial_per_time = 1000
-    bandit_record = [[] for _ in range(times)]
-    uct_record = [[] for _ in range(times)]
-    board = new_simpletree()
+    # bandit_record = [[] for _ in range(times)]
+    # uct_record = [[] for _ in range(times)]
     # print(board.to_pretty_string())
-    for i in range(BUDGET):
-        tree_bandit.do_rollout(board, t = i)
-        tree_uct.do_rollout(board, t = i)
-    for time in range(times):
-        for i in range(trial_per_time):
-            board = new_simpletree()
-            while True:
-                board = tree_bandit.choose(board, trial_per_time - i, 'bandit')
-                # print(board.to_pretty_string())
-                if board.terminal:
-                    # print(board.tup)
-                    reward = board.reward()
-                    # print(reward)
-                    bandit_record[time].append(reward)
-                    break
-    for time in range(times):
-        for i in range(trial_per_time):
-            board = new_simpletree()
-            while True:
-                board = tree_uct.choose(board)
-                # print(board.to_pretty_string())
-                if board.terminal:
-                    # print(board.tup)
-                    reward = board.reward()
-                    # print(reward)
-                    uct_record[time].append(reward)
-                    break
-    return bandit_record, uct_record, tree_bandit, tree_uct
+    # for tree in trees.values():
+    #     for i in range(BUDGET):
+    #         board = new_simpletree()
+    #         tree.do_rollout(board, t = i)
+    ## Evaluation
+    for tree in trees.values():
+        result[tree.select_type] = [[] for _ in range(times)]
+        for time in tqdm(range(times)):
+            ## Train a brand new MCTS
+            for j in range(BUDGET):
+                board = new_simpletree()
+                tree.do_rollout(board, t = j)
+            ## After train, run trial per times experiments
+            for i in range(trial_per_time):
+                board = new_simpletree()
+                while True:
+                    if tree.select_type == 'bandit':
+                        board = tree.choose(board, trial_per_time - i, 'bandit')
+                        # board = tree.choose(board)
+                    else:
+                        board = tree.choose(board)
+                    if board.terminal:
+                        reward = board.reward()
+                        result[tree.select_type][time].append(reward)
+                        break
+            ## Reset the tree after trial_per_time experiments
+            tree.__init__(select_type=tree.select_type, budget=tree.budget)
 
-
-# def _winning_combos():
-#     for start in range(0, 9, 3):  # three in a row
-#         yield (start, start + 1, start + 2)
-#     for start in range(3):  # three in a column
-#         yield (start, start + 3, start + 6)
-#     yield (0, 4, 8)  # down-right diagonal
-#     yield (2, 4, 6)  # down-left diagonal
-
-
-# def _find_winner(tup):
-#     "Returns None if no winner, True if X wins, False if O wins"
-#     for i1, i2, i3 in _winning_combos():
-#         v1, v2, v3 = tup[i1], tup[i2], tup[i3]
-#         if False is v1 is v2 is v3:
-#             return False
-#         if True is v1 is v2 is v3:
-#             return True
-#     return None
+    return trees, result
 
 def new_simpletree():
     return SimpleTree(tup=(), terminal=False)
 
+trees, result = play_game()
 
-bandit_record, uct_record, tree_bandit, tee_uct = play_game()
 # %%
-np.mean([np.max(i) for i in bandit_record])
+record_mean = {}
+all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy']
+for tree_name in all_tree_type:
+    record = result[tree_name]
+    record_mean[tree_name] = np.mean([np.max(i) for i in result[tree_name]])
 # %%
-np.mean([np.max(i) for i in uct_record])
+record_mean
 # %%
 bandit_record
 # %%

@@ -8,7 +8,13 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 import math
 from functools import partial
+import random
 import numpy as np
+
+from scipy.stats import norm,uniform
+import scipy.stats as ss
+import copy
+from bisect import bisect, insort
 
 class model:
     def __init__(self, budget, window_length=2):
@@ -65,11 +71,14 @@ class MCTS:
         self.Q = defaultdict(float)  # total reward of each node
         self.N = defaultdict(float)  # total visit count for each node
         self.record = defaultdict(list)
+        self.sorted_reward = defaultdict(list)
         self.models = defaultdict(partial(model,budget=budget))
         self.children = dict()  # children of each node
         self.exploration_weight = exploration_weight
         self.select_type = select_type
         self.budget = budget
+        self.epsilon = 0.1
+        np.random.seed(1000)
 
     def choose(self, node, t=1, mode='uct'):
         "Choose the best successor of node. (Choose a move in the game)"
@@ -135,6 +144,15 @@ class MCTS:
                 node = self._bandit_select(node, t)
             elif self.select_type == 'uct_normal':
                 node = self._uct_normal_select(node, t)
+            elif self.select_type == 'uct_v':
+                node = self._uct_v_select(node, t)
+            elif self.select_type == 'maxmedian':
+                node = self._maxmedian_select(node, t)
+            elif self.select_type == 'random':
+                node = self._random_select(node, t)
+            elif self.select_type == 'epsilon_greedy':
+                node = self._epsilon_greedy_select(node, t)
+            
 
     def _expand(self, node):
         "Update the `children` dict with the children of `node`"
@@ -168,6 +186,7 @@ class MCTS:
             self.Q[node] += reward
             self.record[node].append(reward)
             self.models[node].getReward(reward)
+            insort(self.sorted_reward[node], reward)
             # reward = 1 - reward  # 1 for me is 0 for my enemy, and vice versa
 
     def _uct_select(self, node):
@@ -215,13 +234,86 @@ class MCTS:
                 return float("inf")
             else:
                 mean = self.Q[n] / self.N[n]
-                squared_rewards = np.array(self.record[n]) ** 2
+                squared_rewards = sum(np.array(self.record[n]) ** 2)
                 sv = (squared_rewards - self.N[n] * (mean ** 2)) / (self.N[n] - 1)
                 c = np.sqrt(16 * sv * np.log(t - 1) / self.N[n])
                 return mean + c
         return max(self.children[node], key=uct_normal)
 
+    def _uct_v_select(self, node, t):
+        "Select a child of node, balancing exploration & exploitation"
 
+        # All children of node should already be expanded:
+        assert all(n in self.children for n in self.children[node])
+
+        log_N_vertex = math.log(self.N[node])
+
+        def uct_v(n):
+            "Upper confidence bound for trees"
+            if self.N[n] < 2:
+                return float("inf")
+            else:
+                mean = self.Q[n] / self.N[n]
+                squared_rewards = sum(np.array(self.record[n]) ** 2)
+                sv = (squared_rewards - self.N[n] * (mean ** 2)) / (self.N[n] - 1)
+                fac1 = np.sqrt(3 * sv * np.log(1.2 * t) / self.N[n])
+                fac2 = 3 * np.log(1.2 * t) / self.N[n]
+                return mean + fac1 + fac2
+        return max(self.children[node], key=uct_v)
+    
+    def _maxmedian_select(self, node, t):
+        assert all(n in self.children for n in self.children[node])
+        m = np.inf
+        for n in self.children[node]:
+            if self.N[n] < m:
+                m = self.N[n]
+
+        def explo_func(t):
+            return 1 / t
+        
+        def rd_argmax(vector):
+            """
+            Compute random among eligible maximum indices
+            :param vector: np.array
+            :return: int, random index among eligible maximum indices
+            """
+            m = np.amax(vector)
+            indices = np.nonzero(vector == m)[0]
+            return np.random.choice(indices)
+
+        def maxmedian(n):
+            if self.N[n] < 1:
+                return float("inf")
+            else:
+                order = np.ceil(self.N[n]/m).astype(np.int32)
+                idx = self.sorted_reward[n][-order]
+                return idx
+        
+        if np.random.binomial(1, explo_func(t)) == 1:
+            #print(list(self.children[node]))
+            return_node = random.choice(list(self.children[node]))
+            #print(return_node)
+            return return_node
+        else:
+            return_node = max(self.children[node], key=maxmedian)
+            #print(return_node)
+            return return_node
+    
+    def _random_select(self, node, t):
+        assert all(n in self.children for n in self.children[node])
+        return random.choice(list(self.children[node]))
+    
+    def _epsilon_greedy_select(self, node, t):
+        assert all(n in self.children for n in self.children[node])
+        def average(n):
+            return self.Q[n] / self.N[n]
+        if np.random.rand() < self.epsilon:
+            return random.choice(list(self.children[node]))
+        else:
+            return max(self.children[node], key=average)
+
+
+                    
 class Node(ABC):
     """
     A representation of a single board state.
