@@ -22,8 +22,8 @@ from monte_carlo_tree_search import MCTS, Node
 import numpy as np
 from tqdm.notebook import tqdm
 _TTTB = namedtuple("SimpleTree", "tup terminal")
-LAYERS = 3
-BUDGET = 1000
+LAYERS = 4
+BUDGET = 300
 
 # Inheriting from a namedtuple is convenient because it makes the class
 # immutable and predefines __init__, __repr__, __hash__, __eq__, and others
@@ -45,7 +45,7 @@ class SimpleTree(_TTTB, Node):
     def reward(board):
         return board.cal_reward()
     
-    def cal_reward(board, bounded=False):
+    def cal_reward(board, bounded=True):
         start = 1
         accum = 0
         for selection in board.tup:
@@ -53,7 +53,7 @@ class SimpleTree(_TTTB, Node):
             start *= 0.5
         if bounded:
             return np.random.beta(accum + 1, accum + 1)
-        return np.random.normal(0,accum)
+        return np.random.normal(0.01 - 0.01 * accum , accum) ## Trap
 
     def is_terminal(board):
         return board.terminal
@@ -80,7 +80,7 @@ class SimpleTree(_TTTB, Node):
 
 
 def play_game():
-    all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy']
+    all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy', 'sp_mcts']
     trees = {}
     for tree_name in all_tree_type:
         trees[tree_name] = MCTS(budget=BUDGET, select_type=tree_name)
@@ -89,8 +89,8 @@ def play_game():
     # tree_uct = MCTS(budget=BUDGET, select_type='uct')
     # tree_uct_normal(budget=BUDGET, select_type='uct_normal')
     result = {}
-    times = 1000
-    trial_per_time = 1000
+    times = 100
+    trial_per_time = 100
     # bandit_record = [[] for _ in range(times)]
     # uct_record = [[] for _ in range(times)]
     # print(board.to_pretty_string())
@@ -131,7 +131,7 @@ trees, result = play_game()
 
 # %%
 record_mean = {}
-all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy']
+all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy', 'sp_mcts']
 for tree_name in all_tree_type:
     record = result[tree_name]
     record_mean[tree_name] = np.mean([np.max(i) for i in result[tree_name]])

@@ -152,6 +152,8 @@ class MCTS:
                 node = self._random_select(node, t)
             elif self.select_type == 'epsilon_greedy':
                 node = self._epsilon_greedy_select(node, t)
+            elif self.select_type == 'sp_mcts':
+                node = self._sp_mcts_select(node, t)
             
 
     def _expand(self, node):
@@ -226,7 +228,7 @@ class MCTS:
         # All children of node should already be expanded:
         assert all(n in self.children for n in self.children[node])
 
-        log_N_vertex = math.log(self.N[node])
+        log_N_vertex = math.log(self.N[node] - 1)
 
         def uct_normal(n):
             "Upper confidence bound for trees"
@@ -236,9 +238,29 @@ class MCTS:
                 mean = self.Q[n] / self.N[n]
                 squared_rewards = sum(np.array(self.record[n]) ** 2)
                 sv = (squared_rewards - self.N[n] * (mean ** 2)) / (self.N[n] - 1)
-                c = np.sqrt(16 * sv * np.log(t - 1) / self.N[n])
+                c = np.sqrt(16 * sv * log_N_vertex / self.N[n])
                 return mean + c
         return max(self.children[node], key=uct_normal)
+
+    def _sp_mcts_select(self, node, t):
+        "Select a child of node, balancing exploration & exploitation"
+
+        # All children of node should already be expanded:
+        assert all(n in self.children for n in self.children[node])
+
+        log_N_vertex = math.log(self.N[node])
+
+        def sp_mcts(n):
+            "Upper confidence bound for trees"
+            if self.N[n] < 2:
+                return float("inf")
+            else:
+                uct_factor = self.Q[n] / self.N[n] + self.exploration_weight * math.sqrt(log_N_vertex / self.N[n])
+                mean = self.Q[n] / self.N[n]
+                squared_rewards = sum(np.array(self.record[n]) ** 2)
+                sv = np.sqrt((squared_rewards - self.N[n] * (mean ** 2)) / (self.N[n] - 1))
+                return uct_factor + sv
+        return max(self.children[node], key=sp_mcts)
 
     def _uct_v_select(self, node, t):
         "Select a child of node, balancing exploration & exploitation"
@@ -256,8 +278,8 @@ class MCTS:
                 mean = self.Q[n] / self.N[n]
                 squared_rewards = sum(np.array(self.record[n]) ** 2)
                 sv = (squared_rewards - self.N[n] * (mean ** 2)) / (self.N[n] - 1)
-                fac1 = np.sqrt(3 * sv * np.log(1.2 * t) / self.N[n])
-                fac2 = 3 * np.log(1.2 * t) / self.N[n]
+                fac1 = np.sqrt(3 * sv * np.log(1.2 * self.N[node]) / self.N[n])
+                fac2 = 3 * np.log(1.2 * self.N[node]) / self.N[n]
                 return mean + fac1 + fac2
         return max(self.children[node], key=uct_v)
     
@@ -289,7 +311,7 @@ class MCTS:
                 idx = self.sorted_reward[n][-order]
                 return idx
         
-        if np.random.binomial(1, explo_func(t)) == 1:
+        if np.random.binomial(1, explo_func(self.N[node])) == 1:
             #print(list(self.children[node]))
             return_node = random.choice(list(self.children[node]))
             #print(return_node)
