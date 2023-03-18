@@ -109,7 +109,7 @@ class MCTS:
         self.qomax_threshold = (self.k_ary ** self.layers) * (self.batch_size * self.sample_size)
         self.cnt = 0 
         if self.qomax_threshold > self.budget:
-            raise ValueError('Budget not enough to run Qomax')
+            raise ValueError(f'Budget not enough to run Qomax, need {self.qomax_threshold}')
         self.qomax_ans = None
         np.random.seed(seed)
         random.seed(seed)
@@ -385,7 +385,9 @@ class MCTS:
         # print(self.qomax_threshold)
         # assert all(n in self.children for n in self.children[node])
         # print(t)
+        # print(f'layer: {self.layers}')
         target = numberToBase(t % (self.k_ary ** self.layers), self.k_ary, self.layers)
+        # print(target)
         def qomax(n):
             path = []
             ## All children nodes should be traversed same times
@@ -415,6 +417,8 @@ class MCTS:
                     self.children[next_node] = next_node.find_children()
                 next_node = next_node.make_move(ind)
                 path.append(next_node)
+            if len(path) != 5:
+                raise ValueError(path)
             return path
         else:
             if self.qomax_ans:

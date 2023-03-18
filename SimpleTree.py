@@ -25,8 +25,8 @@ import matplotlib.pyplot as plt
 
 _TTTB = namedtuple("SimpleTree", "tup terminal")
 k_ary = 2
-LAYERS = 2
-BUDGET = 2000
+LAYERS = 4
+BUDGET = 20000
 
 # Inheriting from a namedtuple is convenient because it makes the class
 # immutable and predefines __init__, __repr__, __hash__, __eq__, and others
@@ -72,13 +72,13 @@ class SimpleTree(_TTTB, Node):
 
 
 def play_game():
-    all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy', 'sp_mcts', 'qomax']
+    all_tree_type = ['bandit', 'random', 'qomax']
     # all_tree_type = ['random']
     trees = {}
     for tree_name in all_tree_type:
         trees[tree_name] = MCTS(budget=BUDGET, select_type=tree_name, k_ary=k_ary, layers=LAYERS)
     result = {}
-    times = 40
+    times = 10
     trial_per_time = 20
     ## Evaluation
     for tree in trees.values():
@@ -106,7 +106,7 @@ def play_game():
                         break
             ## Reset the tree after trial_per_time experiments
             if time != times - 1:
-                tree.__init__(select_type=tree.select_type, budget=tree.budget, seed=time)
+                tree.__init__(select_type=tree.select_type, budget=tree.budget, seed=time, k_ary = k_ary, layers=LAYERS)
 
     return trees, result
 
@@ -118,8 +118,8 @@ trees, result = play_game()
 
 # %%
 record_mean = {}
-all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy', 'sp_mcts', 'qomax']
-# all_tree_type = ['bandit', 'random']
+# all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy', 'sp_mcts', 'qomax']
+all_tree_type = ['bandit', 'random', 'qomax']
 for tree_name in all_tree_type:
     record = result[tree_name]
     record_mean[tree_name] = (np.mean([np.max(i) for i in result[tree_name]]), np.std([np.max(i) for i in result[tree_name]]))
