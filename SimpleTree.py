@@ -25,8 +25,8 @@ import matplotlib.pyplot as plt
 
 _TTTB = namedtuple("SimpleTree", "tup terminal")
 k_ary = 2
-LAYERS = 4
-BUDGET = 20000
+LAYERS = 5
+BUDGET = 40000
 
 # Inheriting from a namedtuple is convenient because it makes the class
 # immutable and predefines __init__, __repr__, __hash__, __eq__, and others

@@ -417,8 +417,6 @@ class MCTS:
                     self.children[next_node] = next_node.find_children()
                 next_node = next_node.make_move(ind)
                 path.append(next_node)
-            if len(path) != 5:
-                raise ValueError(path)
             return path
         else:
             if self.qomax_ans:
