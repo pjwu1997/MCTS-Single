@@ -17,13 +17,16 @@ corrresponds to this tuple:
 """
 # %%
 from collections import namedtuple
-from random import choice
+from random import choice, seed
 from monte_carlo_tree_search import MCTS, Node
 import numpy as np
 from tqdm.notebook import tqdm
+import matplotlib.pyplot as plt
+
 _TTTB = namedtuple("SimpleTree", "tup terminal")
-LAYERS = 4
-BUDGET = 300
+k_ary = 2
+LAYERS = 2
+BUDGET = 2000
 
 # Inheriting from a namedtuple is convenient because it makes the class
 # immutable and predefines __init__, __repr__, __hash__, __eq__, and others
@@ -33,27 +36,27 @@ class SimpleTree(_TTTB, Node):
             return set()
         # Otherwise, you can make a move in each of the empty spots
         return {
-            board.make_move(i) for i in [0,1]
+            board.make_move(i) for i in range(k_ary)
         }
 
     def find_random_child(board):
         if board.terminal:
             return None  # If the game is finished then no moves can be made
-        empty_spots = [0,1]
+        empty_spots = list(range(k_ary))
         return board.make_move(choice(empty_spots))
 
     def reward(board):
         return board.cal_reward()
     
-    def cal_reward(board, bounded=True):
-        start = 1
-        accum = 0
+    def cal_reward(board, bounded=False):
+        start = 3
+        accum = 2 if bounded else 0
         for selection in board.tup:
             accum += selection * start
             start *= 0.5
         if bounded:
             return np.random.beta(accum + 1, accum + 1)
-        return np.random.normal(0.01 - 0.01 * accum , accum) ## Trap
+        return np.random.normal(0.5, accum) ## Trap
 
     def is_terminal(board):
         return board.terminal
@@ -67,47 +70,29 @@ class SimpleTree(_TTTB, Node):
         is_terminal = (len(tup) == LAYERS)
         return SimpleTree(tup, is_terminal)
 
-    def to_pretty_string(board):
-        to_char = lambda v: ("X" if v is True else ("O" if v is False else " "))
-        rows = [
-            [to_char(board.tup[3 * row + col]) for col in range(3)] for row in range(3)
-        ]
-        return (
-            "\n  1 2 3\n"
-            + "\n".join(str(i + 1) + " " + " ".join(row) for i, row in enumerate(rows))
-            + "\n"
-        )
-
 
 def play_game():
-    all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy', 'sp_mcts']
+    all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy', 'sp_mcts', 'qomax']
+    # all_tree_type = ['random']
     trees = {}
     for tree_name in all_tree_type:
-        trees[tree_name] = MCTS(budget=BUDGET, select_type=tree_name)
-    print(trees)
-    # tree_bandit = MCTS(budget=BUDGET, select_type='bandit')
-    # tree_uct = MCTS(budget=BUDGET, select_type='uct')
-    # tree_uct_normal(budget=BUDGET, select_type='uct_normal')
+        trees[tree_name] = MCTS(budget=BUDGET, select_type=tree_name, k_ary=k_ary, layers=LAYERS)
     result = {}
-    times = 100
-    trial_per_time = 100
-    # bandit_record = [[] for _ in range(times)]
-    # uct_record = [[] for _ in range(times)]
-    # print(board.to_pretty_string())
-    # for tree in trees.values():
-    #     for i in range(BUDGET):
-    #         board = new_simpletree()
-    #         tree.do_rollout(board, t = i)
+    times = 40
+    trial_per_time = 20
     ## Evaluation
     for tree in trees.values():
         result[tree.select_type] = [[] for _ in range(times)]
         for time in tqdm(range(times)):
+            # print(time)
             ## Train a brand new MCTS
             for j in range(BUDGET):
                 board = new_simpletree()
                 tree.do_rollout(board, t = j)
             ## After train, run trial per times experiments
             for i in range(trial_per_time):
+                np.random.seed(i)
+                seed(i)
                 board = new_simpletree()
                 while True:
                     if tree.select_type == 'bandit':
@@ -120,7 +105,8 @@ def play_game():
                         result[tree.select_type][time].append(reward)
                         break
             ## Reset the tree after trial_per_time experiments
-            tree.__init__(select_type=tree.select_type, budget=tree.budget)
+            if time != times - 1:
+                tree.__init__(select_type=tree.select_type, budget=tree.budget, seed=time)
 
     return trees, result
 
@@ -129,28 +115,15 @@ def new_simpletree():
 
 trees, result = play_game()
 
+
 # %%
 record_mean = {}
-all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy', 'sp_mcts']
+all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy', 'sp_mcts', 'qomax']
+# all_tree_type = ['bandit', 'random']
 for tree_name in all_tree_type:
     record = result[tree_name]
-    record_mean[tree_name] = np.mean([np.max(i) for i in result[tree_name]])
+    record_mean[tree_name] = (np.mean([np.max(i) for i in result[tree_name]]), np.std([np.max(i) for i in result[tree_name]]))
 # %%
 record_mean
-# %%
-bandit_record
-# %%
-bandit_record
-# %%
-for key, value in tree_bandit.models.items():
-    print(key)
-    print(value.prediction(100))
-# %%
-tee_uct.Q
-# %%
-board = new_simpletree()
-board = tree_bandit._bandit_select(board,1)
-board
-# %%
-board.cal_reward()
+
 # %%
