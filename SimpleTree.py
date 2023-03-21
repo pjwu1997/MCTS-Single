@@ -25,8 +25,8 @@ import matplotlib.pyplot as plt
 
 _TTTB = namedtuple("SimpleTree", "tup terminal")
 k_ary = 2
-LAYERS = 5
-BUDGET = 40000
+LAYERS = 3
+BUDGET = 7000
 
 # Inheriting from a namedtuple is convenient because it makes the class
 # immutable and predefines __init__, __repr__, __hash__, __eq__, and others
@@ -72,14 +72,14 @@ class SimpleTree(_TTTB, Node):
 
 
 def play_game():
-    all_tree_type = ['bandit', 'random', 'qomax']
+    all_tree_type = ['bandit', 'uct', 'uct_normal', 'maxmedian', 'random', 'qomax']
     # all_tree_type = ['random']
     trees = {}
     for tree_name in all_tree_type:
         trees[tree_name] = MCTS(budget=BUDGET, select_type=tree_name, k_ary=k_ary, layers=LAYERS)
     result = {}
     times = 10
-    trial_per_time = 20
+    trial_per_time = 50
     ## Evaluation
     for tree in trees.values():
         result[tree.select_type] = [[] for _ in range(times)]
@@ -118,12 +118,20 @@ trees, result = play_game()
 
 # %%
 record_mean = {}
-# all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy', 'sp_mcts', 'qomax']
-all_tree_type = ['bandit', 'random', 'qomax']
+all_tree_type = ['bandit', 'uct', 'uct_normal', 'maxmedian', 'random', 'qomax']
+# all_tree_type = ['bandit', 'uct']
 for tree_name in all_tree_type:
     record = result[tree_name]
     record_mean[tree_name] = (np.mean([np.max(i) for i in result[tree_name]]), np.std([np.max(i) for i in result[tree_name]]))
 # %%
 record_mean
+
+# %%
+result['bandit'][5]
+# %%
+from scipy.stats import ks_2samp
+num1 = [np.max(i) for i in result['bandit']]
+num2 = [np.max(i) for i in result['uct']]
+ks_2samp(num1, num2)
 
 # %%

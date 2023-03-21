@@ -30,6 +30,7 @@ with open('config.json', 'r') as f:
     config = json.load(f)
 
 _TTTB = namedtuple("SimpleTree", "tup terminal")
+k_ary = 2
 LAYERS = 3
 BUDGET = 10000
 
@@ -42,19 +43,19 @@ class SimpleTree(_TTTB, Node):
             return set()
         # Otherwise, you can make a move in each of the empty spots
         return {
-            board.make_move(i) for i in [0,1]
+            board.make_move(i) for i in range(k_ary)
         }
 
     def find_random_child(board):
         if board.terminal:
             return None  # If the game is finished then no moves can be made
-        empty_spots = [0,1]
+        empty_spots = list(range(k_ary))
         return board.make_move(choice(empty_spots))
 
     def reward(board):
         return board.cal_reward()
     
-    def cal_reward(board, bounded=False):
+    def cal_reward(board, bounded=True):
         start = 3
         accum = 2 if bounded else 0
         for selection in board.tup:
@@ -79,19 +80,20 @@ class SimpleTree(_TTTB, Node):
 ## Default Binary Tree
 def play_game():
     global LAYERS
-    all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy', 'sp_mcts']
+    all_tree_type = ['bandit', 'uct', 'uct_normal', 'uct_v', 'maxmedian', 'random', 'epsilon_greedy', 'sp_mcts', 'qomax']
     trees = {}
-    for tree_name in all_tree_type:
-        trees[tree_name] = MCTS(budget=BUDGET, select_type=tree_name)
     result = defaultdict(dict)
     for layer in config['layers']:
         LAYERS = layer
         for times in config['times']:
             for trial_per_time in config['trials']:
                 for budget in config['budget']:
-                    budget = (2 ** layer) * budget
+                    budget = (k_ary ** layer) * budget
                     for tree_name in all_tree_type:
-                        trees[tree_name] = MCTS(budget=budget, select_type=tree_name, layers=layer)
+                        try:
+                            trees[tree_name] = MCTS(budget=budget, select_type=tree_name, k_ary = k_ary, layers=layer)
+                        except BaseException as error:
+                            break
                     ## Evaluation
                     for tree in trees.values():
                         result[tree.select_type][str((layer, times, trial_per_time, budget))] = [[] for _ in range(times)]
@@ -117,7 +119,7 @@ def play_game():
                                         break
                             ## Reset the tree after trial_per_time experiments
                             if time != times - 1:
-                                tree.__init__(select_type=tree.select_type, budget=tree.budget, seed=time)
+                                tree.__init__(select_type=tree.select_type, budget=tree.budget, seed=time, k_ary = k_ary, layers=LAYERS)
 
     return trees, result
 

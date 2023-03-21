@@ -104,13 +104,15 @@ class MCTS:
         self.epsilon = 0.1
         self.layers = layers
         self.k_ary = k_ary
-        self.batch_size = int(np.log(self.budget) ** 2) + 1
-        self.sample_size = int(np.log(self.budget)) + 1
-        self.qomax_threshold = (self.k_ary ** self.layers) * (self.batch_size * self.sample_size)
-        self.cnt = 0 
-        if self.qomax_threshold > self.budget:
-            raise ValueError(f'Budget not enough to run Qomax, need {self.qomax_threshold}')
-        self.qomax_ans = None
+        if self.select_type == 'qomax':
+            self.batch_size = int(np.log(self.budget) ** 2) + 1
+            self.sample_size = (int(np.log(self.budget)) + 1) // 2
+            self.qomax_threshold = (self.k_ary ** self.layers) * (self.batch_size * self.sample_size)
+            self.cnt = 0 
+            if self.qomax_threshold > self.budget:
+                # raise ValueError(f'Budget not enough to run Qomax, need {self.qomax_threshold}')
+                print(f'Budget not enough to run Qomax, need {self.qomax_threshold}')
+            self.qomax_ans = None
         np.random.seed(seed)
         random.seed(seed)
 
@@ -151,6 +153,8 @@ class MCTS:
     def do_rollout(self, node, t):
         "Make the tree one layer better. (Train for one iteration.)"
         path = self._select(node, t)
+        # if len(path) == self.layers + 1:
+        #     print('finish')
         leaf = path[-1]
         self._expand(leaf)
         reward, path = self._simulate(leaf, path)
@@ -168,12 +172,12 @@ class MCTS:
                 # node is either unexplored or terminal
                 return path
             unexplored = self.children[node] - self.children.keys()
-            # print(unexplored)
-            # print()
             if unexplored:
+                # if there are still unexplored node, randomly select one rather than compute by bandit algorithms.
                 n = unexplored.pop()
                 path.append(n)
                 return path
+            # If all children nodes are visited, then safely select by bandits.
             if self.select_type == 'uct':
                 node = self._uct_select(node)  # descend a layer deeper
             elif self.select_type == 'bandit':
@@ -221,6 +225,8 @@ class MCTS:
 
     def _backpropagate(self, path, reward):
         "Send the reward back up to the ancestors of the leaf"
+        if len(path) != self.layers + 1:
+            raise ValueError('Wrong path')
         for node in reversed(path):
             self.N[node] += 1
             self.Q[node] += reward
