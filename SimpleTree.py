@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 _TTTB = namedtuple("SimpleTree", "tup terminal")
 k_ary = 2
 LAYERS = 3
-BUDGET = 7000
+BUDGET = 5000
 
 # Inheriting from a namedtuple is convenient because it makes the class
 # immutable and predefines __init__, __repr__, __hash__, __eq__, and others
@@ -97,6 +97,7 @@ def play_game():
                 while True:
                     if tree.select_type == 'bandit':
                         board = tree.choose(board, trial_per_time - i, 'bandit')
+                        # board = tree.choose(board, 1, 'bandit')
                         # board = tree.choose(board)
                     else:
                         board = tree.choose(board)

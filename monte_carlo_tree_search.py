@@ -211,9 +211,11 @@ class MCTS:
     #             return 1 - reward if invert_reward else reward
     #         node = node.find_random_child()
     #         invert_reward = not invert_reward
+    
     def _simulate(self, node, path):
         "Returns the reward for a random simulation (to completion) of `node`"
         while True:
+            # self._expand(node) #Treat as visited
             if node.is_terminal():
                 reward = node.reward()
                 return reward, path
@@ -226,6 +228,7 @@ class MCTS:
     def _backpropagate(self, path, reward):
         "Send the reward back up to the ancestors of the leaf"
         if len(path) != self.layers + 1:
+            print(path)
             raise ValueError('Wrong path')
         for node in reversed(path):
             self.N[node] += 1
@@ -387,23 +390,15 @@ class MCTS:
             return max(self.children[node], key=average)
     
     def _qomax_select(self, node, t):
-        # print(node.tup)
-        # print(self.qomax_threshold)
-        # assert all(n in self.children for n in self.children[node])
-        # print(t)
-        # print(f'layer: {self.layers}')
         target = numberToBase(t % (self.k_ary ** self.layers), self.k_ary, self.layers)
-        # print(target)
         def qomax(n):
-            path = []
+            path = [n]
             ## All children nodes should be traversed same times
             while(not n.terminal):
                 qomax_stat = np.zeros(len(self.children[n]))
                 children_list = []
                 for ind, child in enumerate(self.children[n]):
                     children_list.append(child)
-                    # print(child.tup)
-                    # print(self.sorted_reward[child])
                     samples = np.array(self.record[child]).reshape(-1, self.batch_size)
                     M = np.max(samples, axis = 1)
                     qomax_stat[ind] = np.quantile(M, 0.5)
@@ -416,7 +411,6 @@ class MCTS:
             path = [node]
             next_node = node
             for ind in target:
-                # next_node = next_node.make_move(ind)
                 if next_node in self.children:
                     pass  # already expanded
                 else:
